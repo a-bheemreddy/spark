@@ -1,0 +1,102 @@
+version: "3.7"
+services:
+
+  zookeeper:
+    image: zookeeper:3.6.1
+    container_name: zookeeper
+    expose:
+      - "2181"
+    volumes:
+      - kafka_zookeeper:/opt/zookeeper-3.6.1/data
+    networks:
+      kafkanet:
+        ipv4_address: 172.25.0.11
+
+  kafka1:
+    image: wurstmeister/kafka:2.12-2.2.0
+    container_name: kafka1
+    command: [start-kafka.sh]
+    expose:
+      - "8080"
+      - "9092"
+    ports:
+      - "9099:9092"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 172.25.0.12
+      KAFKA_ZOOKEEPER_CONNECT: 172.25.0.11:2181
+      KAFKA_ADVERTISED_PORT: 9092
+    volumes:
+      - kafka_kafka1:/opt/kafka_2.12-2.2.0/logs
+    networks:
+      kafkanet:
+        ipv4_address: 172.25.0.12
+    depends_on:
+      - "zookeeper"
+
+  kafka2:
+    image: wurstmeister/kafka:2.12-2.2.0
+    container_name: kafka2
+    command: [start-kafka.sh]
+    expose:
+      - "8080"
+      - "9092"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 172.25.0.13
+      KAFKA_ZOOKEEPER_CONNECT: 172.25.0.11:2181
+      KAFKA_ADVERTISED_PORT: 9092
+    volumes:
+      - kafka_kafka2:/opt/kafka_2.12-2.2.0/logs
+    depends_on:
+      - "zookeeper"
+    networks:
+      kafkanet:
+        ipv4_address: 172.25.0.13
+
+  spark-master:
+    image: bitnami/spark:3.5.3
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_LOCAL_IP=127.0.0.1  # Set to the appropriate IP address
+      - SPARK_DRIVER_MEMORY=2g
+      - SPARK_EXECUTOR_MEMORY=2g
+    volumes:
+      - ./:/app
+    networks:
+      kafkanet:
+        ipv4_address: 172.25.0.14
+    ports:
+      - "7077:7077"  # Spark master port
+      - "8080:8080"  # Spark web UI
+      - "4040:4040"  # Spark application UI
+
+  spark-worker:
+    image: bitnami/spark:3.5.3
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+    volumes:
+      - ./:/app
+    networks:
+      kafkanet:
+        ipv4_address: 172.25.0.15
+    depends_on:
+      - spark-master
+
+networks:
+  kafkanet:
+    name: kafkanet
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  kafka_zookeeper:
+  kafka_kafka1:
+  kafka_kafka2:
+
